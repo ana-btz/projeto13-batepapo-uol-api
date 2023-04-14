@@ -33,17 +33,14 @@ app.post("/participants", async (req, res) => {
     const schema = joi.object({ name: joi.string().min(1) });
     const { error } = schema.validate({ name });
 
-    if (error) {
-        const errorMessage = error.details.map(detail => detail.message);
-        return res.status(422).send(errorMessage);
-    }
-
-    // Validar se name já não existe
-    const nameExists = await db.collection("participants").findOne({ name });
-
-    if (nameExists) return res.sendStatus(409);
+    if (error) return res.status(422).send(error.details);
 
     try {
+        // Validar se name já não existe
+        const nameExists = await db.collection("participants").findOne({ name });
+
+        if (nameExists) return res.sendStatus(409);
+
         // Salvar participante no Banco de dados
         await db.collection("participants").insertOne({ name, lastStatus: Date.now() });
 
@@ -69,6 +66,44 @@ app.get("/participants", async (req, res) => {
     try {
         const participants = await db.collection("participants").find().toArray();
         res.send(participants);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
+app.post("/messages", async (req, res) => {
+    const { to, text, type } = req.body;
+    const from = req.headers.user;
+
+    // Validar dados recebidos
+    const schema = joi.object({
+        to: joi.string().min(1),
+        text: joi.string().min(1),
+        type: joi.valid("message").valid("private_message"),
+        from: joi.required()
+    });
+
+    const { error } = schema.validate({ from, to, text, type });
+
+    if (error) return res.status(422).send(error.details);
+
+    try {
+        // Validar se participante existe
+        const participantExists = await db.collection("participants").findOne({ name: from });
+
+        if (participantExists === null) res.sendStatus(422);
+
+        // Salvar mensagem no Banco de dados
+        await db.collection("messages").insertOne({
+            from,
+            to,
+            text,
+            type,
+            time: dayjs().format("HH:mm:ss")
+        });
+
+        res.sendStatus(201);
+
     } catch (err) {
         res.status(500).send(err.message);
     }
