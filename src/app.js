@@ -31,9 +31,9 @@ app.post("/participants", async (req, res) => {
 
     // Validar se name é str não vazia
     const schema = joi.object({ name: joi.string().min(1) });
-    const { error } = schema.validate({ name });
+    const { error } = schema.validate(req.body, { abortEarly: false });
 
-    if (error) return res.status(422).send(error.details);
+    if (error) return res.status(422).send(error.details.map(d => d.message));
 
     try {
         // Validar se name já não existe
@@ -83,9 +83,9 @@ app.post("/messages", async (req, res) => {
         from: joi.required()
     });
 
-    const { error } = schema.validate({ from, to, text, type });
+    const { error } = schema.validate({ ...req.body, from: from }, { abortEarly: false });
 
-    if (error) return res.status(422).send(error.details);
+    if (error) return res.status(422).send(error.details.map(d => d.message));
 
     try {
         // Validar se participante existe
@@ -104,6 +104,33 @@ app.post("/messages", async (req, res) => {
 
         res.sendStatus(201);
 
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
+app.get("/messages", async (req, res) => {
+    const from = req.headers.user;
+    const limit = req.query.limit;
+
+    // Validar query string
+    const invalidLimit = limit && (parseInt(limit) <= 0 || isNaN(+limit));
+
+    if (invalidLimit) return res.sendStatus(422);
+
+    try {
+        // Buscar menssagens no Banco de dados
+        const messages = await db.collection("messages").find({
+            $or: [
+                { to: { $in: ["Todos", from] } },
+                { type: "message" },
+                { from: from }
+            ]
+        }).toArray();
+
+        if (limit) return res.send(messages.reverse().slice(0, parseInt(limit)));
+
+        res.send(messages.reverse());
     } catch (err) {
         res.status(500).send(err.message);
     }
