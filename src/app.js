@@ -30,7 +30,7 @@ app.post("/participants", async (req, res) => {
     const { name } = req.body;
 
     // Validar se name é str não vazia
-    const schema = joi.object({ name: joi.string().min(1) });
+    const schema = joi.object({ name: joi.string().min(1).required() });
     const { error } = schema.validate(req.body, { abortEarly: false });
 
     if (error) return res.status(422).send(error.details.map(d => d.message));
@@ -77,9 +77,9 @@ app.post("/messages", async (req, res) => {
 
     // Validar dados recebidos
     const schema = joi.object({
-        to: joi.string().min(1),
-        text: joi.string().min(1),
-        type: joi.valid("message").valid("private_message"),
+        to: joi.string().min(1).required(),
+        text: joi.string().min(1).required(),
+        type: joi.valid("message").valid("private_message").required(),
         from: joi.required()
     });
 
@@ -131,6 +131,31 @@ app.get("/messages", async (req, res) => {
         if (limit) return res.send(messages.reverse().slice(0, parseInt(limit)));
 
         res.send(messages.reverse());
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
+app.post("/status", async (req, res) => {
+    const name = req.headers.user;
+
+    if (!name) return res.sendStatus(404);
+
+    try {
+        // Verificar se participante consta no BD
+        const participantExists = await db.collection("participants").findOne({ name });
+
+        if (!participantExists) return res.sendStatus(404);
+
+        const filter = { name };
+        const updateParticipant = {
+            $set: {
+                lastStatus: Date.now()
+            }
+        };
+        const result = await db.collection("participants").updateOne(filter, updateParticipant);
+
+        res.sendStatus(200);
     } catch (err) {
         res.status(500).send(err.message);
     }
