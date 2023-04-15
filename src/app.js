@@ -161,4 +161,37 @@ app.post("/status", async (req, res) => {
     }
 });
 
+// Remover de usuários inativos
+setInterval(removeInactive, 15000);
+
+async function removeInactive() {
+    const inactive = Date.now() - 10000;
+
+    try {
+        const participants = await db.collection("participants").find({
+            lastStatus: { $lt: inactive }
+        }).toArray();
+
+        console.log(participants);
+
+        const result = await db.collection("participants").deleteMany({
+            lastStatus: { $lt: inactive }
+        });
+
+        participants.forEach(async participant => {
+            await db.collection("messages").insertOne({
+                from: participant.name,
+                to: "Todos",
+                text: "sai da sala...",
+                type: "status",
+                time: dayjs().format("HH:mm:ss")
+            });
+        });
+
+        console.log(`Deleted ${result.deletedCount} documents`)
+    } catch (err) {
+        console.log(err.message);
+    }
+}
+
 app.listen(PORT, () => console.log(`Servidor rodando na porta: ${PORT}`));
